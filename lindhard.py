@@ -1,10 +1,12 @@
 import numpy as np
 from pynverse import inversefunc
 from scipy.misc import derivative
+from scipy.interpolate import UnivariateSpline
+
 
 ##To avoid RuntimeWarning
-import warnings
-warnings.filterwarnings("ignore", category=RuntimeWarning) 
+#import warnings
+#warnings.filterwarnings("ignore", category=RuntimeWarning) 
 
 
 def lindhard(E):
@@ -18,18 +20,19 @@ def lindhard(E):
     return E*fact
 
 
-def lindhard_inv(Ee):
+def lindhard_inv(Ee, Ermin=1e-3, Ermax=20):
     """ Computes the numercial inverse function of the lindhard model. This converts ionization energy to nuclear recoils.
     """
-    return inversefunc(lindhard, y_values = Ee).astype(float)
+    #return inversefunc(lindhard, y_values = Ee).astype(float)
+    Er = np.linspace(Ermin, Ermax, 100)
+    return UnivariateSpline(lindhard(Er), Er, k=1, s=0)(Ee)
 
-
-def lindhard_derivative(E, dx=1e-6):
+def lindhard_derivative(E, Ermin=1e-3, Ermax=20):#dx=1e-6):
     """ Calculates the dEe/dEr useful to some calculus for the differential rate.
     """
     if type(E) is list:
         E = np.array(E)
-    return derivative(lindhard, E, dx=dx)
-
-
+    Er = np.linspace(Ermin, Ermax, 100)
+    f_interp = UnivariateSpline(Er, lindhard(Er), k=2, s=0)
+    return f_interp.derivative()(E)
 
