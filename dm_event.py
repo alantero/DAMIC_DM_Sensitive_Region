@@ -30,9 +30,11 @@ class dm_event(object):
         if self.detection:
             dRdE = dR_dEe(Enr_space, self.N_p_Si, self.N_n_Si, self.mass_dm, self.cross_section)
             C_sig = simpson(dRdE, lindhard(Enr_space))
+            self.E_space_dist, self.dRdE_dist = lindhard(Enr_space), dRdE
         else:
             dRdE = DMU.dRdE_standard(Enr_space, self.N_p_Si, self.N_n_Si, self.mass_dm, self.cross_section)
             C_sig = simpson(dRdE, Enr_space)
+            self.E_space_dist, self.dRdE_dist = Enr_space, dRdE
         return C_sig
 
 
@@ -66,6 +68,7 @@ class dm_event(object):
 
 
     def likelihood(self, deltaLL = False, errors = False, **kwargs):
+        print(errors)
         bkg = hasattr(self, "bkg_ev")
         ### Cut in signal efficiency
         sigmaEe = kwargs["sigmaEe"] if "sigmaEe" in kwargs else 4e-3
@@ -87,23 +90,23 @@ class dm_event(object):
             theta = minimize(log_likelihood, x0, bounds=bnds,method='L-BFGS-B', args = (self.events, self.Ermin, self.Ermax, self.N_p_Si, self.N_n_Si, self.mass_dm, self.mass_det*self.t_exp, self.detection, bkg)).x
         self.theta = theta
 
+        if errors:
+            theta_errors = theta_confidence(theta, self.events, self.Ermin, self.Ermax, self.N_p_Si, self.N_n_Si, self.mass_dm, self.mass_det*self.t_exp, self.detection, bkg)
+
         if deltaLL:
             ### Likelihood value for the fitted parameters s+b
-            lnL_sb = log_likelihood(self.theta, lindhard_inv(self.events), self.Ermin, self.Ermax, self.N_p_Si, self.N_n_Si, self.mass_dm, self.mass_det*self.t_exp, self.detection, bkg) 
+            self.lnL_sb = log_likelihood(self.theta, lindhard_inv(self.events), self.Ermin, self.Ermax, self.N_p_Si, self.N_n_Si, self.mass_dm, self.mass_det*self.t_exp, self.detection, bkg)
             ### Background only likelihood
             b_fit = minimize(log_likelihood_bkg, x0[1], bounds=[bnds[1]], method='L-BFGS-B', args = (lindhard_inv(self.events), self.Ermin, self.Ermax, sigmaEe_b)).x
-            lnL_b = log_likelihood_bkg(b_fit, self.events, self.Eemin, self.Eemax, sigmaEe_b )
-            #print("b: ", lnL_b)
-            #print("sb: ", lnL_sb)
-            self.dLL = lnL_b-lnL_sb
+            self.lnL_b = log_likelihood_bkg(b_fit, self.events, self.Eemin, self.Eemax, sigmaEe_b )
+            ### Difference between likelihoods
+            self.dLL = ( self.lnL_b-self.lnL_sb ).astype(float)
             #print("DeltaLL: ", self.dLL)
             self.b_fit = b_fit
             ### To find the minimum sensitivity measurable with the minimizer
             dLL_thres = kwargs["dLL_thres"] if "dLL_thres" in kwargs else 4.5
             return (self.dLL - dLL_thres)**2
 
-        if errors:
-            theta_errors = theta_confidence(theta, self.events, self.Ermin, self.Ermax, self.N_p_Si, self.N_n_Si, self.mass_dm, self.mass_det*self.t_exp, self.detection, bkg)
         return theta
 
 
@@ -200,6 +203,7 @@ class dm_event(object):
                 plt.xlabel(r"$E_{NR}$ [keV]")
             #fsb = (dRdE_space*self.n_s_det/self.C_sig+fb*self.n_b_det)/(self.n_s_det+self.n_b_det)
             fsb = (dRdE_space/self.C_sig+fb)
+            #fsb = (dRdE_space/self.C_sig*fb)
             plt.plot(E_space, fsb)
             plt.ylabel(r"$f_{s+b}(E|M)$")
 
@@ -225,7 +229,7 @@ class dm_event(object):
                 inv_l.append(minimize(inv, 0.1, args = (x), method="L-BFGS-B", tol=1e-30).x[0])
             if self.detection:
                 plt.plot(u,lindhard(inv_l))
-                plt.ylabel(r"$F_s^{-1}(E|M)$ [keV_ee}]")
+                plt.ylabel(r"$F_s^{-1}(E|M)$ [keV$_ee$}]")
             else:
                 plt.plot(u,inv_l)
                 plt.ylabel(r"$F_s^{-1}(E|M)$ [keV]")

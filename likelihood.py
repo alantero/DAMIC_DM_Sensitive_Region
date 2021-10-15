@@ -33,7 +33,6 @@ def log_likelihood_bkg(b, Ee, Eemin, Eemax, sigma_Ee_b = 8e-3):
     return _lnL
 
 
-
 def log_likelihood(theta,Er,Ermin,Ermax, N_p_Si, N_n_Si, m_x,texp_mass,detection=False, background=False, **kwargs):
     """ Calculates the log likelihood of the given Events signals Er.
         Er must be in Nuclear recoil units.
@@ -135,6 +134,7 @@ def log_probability(theta, Er, Ermin, Ermax, N_p_Si, N_n_Si, m_x, texp_mass, det
     return lp - log_likelihood(theta, Er, Ermin,Ermax,N_p_Si, N_n_Si, m_x, texp_mass, detection, background)
 
 def theta_confidence(theta, Er, Ermin, Ermax, N_p_Si, N_n_Si, m_x, texp_mass, detection=False, background=False, **kwargs):
+    
     if background:
         pos = theta + 1e-4 * np.random.randn(32, len(theta))
     else:
