@@ -1,6 +1,6 @@
 import numpy as np
-from pynverse import inversefunc
-from scipy.misc import derivative
+#from pynverse import inversefunc
+#from scipy.misc import derivative
 from scipy.interpolate import UnivariateSpline
 
 
