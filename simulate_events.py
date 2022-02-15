@@ -3,7 +3,7 @@ from scipy.integrate import simpson
 from pynverse import inversefunc
 from scipy.optimize import minimize
 from scipy.interpolate import UnivariateSpline
-#import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 
 from WIMpy import DMUtils as DMU
 from lindhard import *
@@ -99,22 +99,26 @@ def random_signal_det(n_size, N_p_Si, N_n_Si, m_x, sigma_p, C_sigma0, detection,
     """
 
     if detection:
-        cdf_thres = cdf_signal(sigma_Ee, N_p_Si, N_n_Si, m_x, sigma_p, C_sigma0, detection, sigma_res_Ee=sigma_res_Ee, sigma_Ee=sigma_Ee, Eemin = Eemin, Eemax = Eemax, eff = 1, step=step)
+        cdf_thres = cdf_signal(sigma_Ee, N_p_Si, N_n_Si, m_x, sigma_p, C_sigma0, detection, sigma_res_Ee=sigma_res_Ee, sigma_Ee=sigma_Ee, Eemin = Eemin, Eemax = Eemax, eff = eff, step=step)
     else:
         cdf_thres = 0
     u = np.random.uniform(cdf_thres, 1, n_size)
-    E_range = np.geomspace(lindhard_inv(Eemin), lindhard_inv(Eemax), step)
+    #E_range = np.geomspace(lindhard_inv(Eemin), lindhard_inv(Eemax), step)
+    E_range = np.geomspace(lindhard_inv(sigma_Ee), lindhard_inv(Eemax), step)
     #print(C_sigma0)
     #print(simpson(dR_dEe(E_range, N_p_Si, N_n_Si, m_x, sigma_p, sigma_res_Ee, sigma_Ee, step), lindhard(E_range)))
-    cdf_range = np.array([cdf_signal(E, N_p_Si, N_n_Si, m_x, sigma_p, C_sigma0, detection, sigma_res_Ee=sigma_res_Ee, sigma_Ee=sigma_Ee, Eemin = Eemin, Eemax = Eemax, eff = 1, step=step) for E in E_range])
+    cdf_range = np.array([cdf_signal(E, N_p_Si, N_n_Si, m_x, sigma_p, C_sigma0, detection, sigma_res_Ee=sigma_res_Ee, sigma_Ee=sigma_Ee, Eemin=Eemin, Eemax=Eemax, eff=eff, step=step) for E in E_range])
     #input()
+    #plt.plot(E_range, cdf_range)
     cdf_uni, indices = np.unique(cdf_range[~np.isnan(cdf_range)], return_index=True)
     cdf_inv = UnivariateSpline(cdf_uni, E_range[~np.isnan(cdf_range)][indices], k = 1, s = 0)
+    ### Checking plots
     #plt.plot(E_range, cdf_range)
-    #plt.plot(E_range[~np.isnan(cdf_range)][indices], cdf_uni, alpha = 0.7)
+    ##plt.plot(E_range[~np.isnan(cdf_range)][indices], cdf_uni, alpha = 0.7)
     #plt.show()
     #if detection:
     #    plt.plot(np.linspace(cdf_thres,1,100), lindhard(cdf_inv(np.linspace(cdf_thres,1,100))) )
+    #    plt.show()
     #else:
     #    plt.plot(np.linspace(cdf_thres,1,100), cdf_inv(np.linspace(cdf_thres,1,100)) )
     #plt.show()
@@ -126,6 +130,9 @@ def random_signal_det(n_size, N_p_Si, N_n_Si, m_x, sigma_p, C_sigma0, detection,
     #    #print(cdf_inv(x))
     events = cdf_inv(u)    #events.append(cdf_inv(x))
     if detection:
+        ### Prevent for numerical limitations to have events below sigma_Ee
+        while len(events[lindhard(events)<=sigma_Ee]) != 0:
+            events[lindhard(events)<=sigma_Ee] = cdf_inv( np.random.uniform(cdf_thres, 1, len(events[lindhard(events)<=sigma_Ee])) )
         return lindhard(events).tolist()
     else:
         return events.tolist()

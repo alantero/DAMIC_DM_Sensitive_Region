@@ -33,7 +33,7 @@ def log_likelihood_bkg(b, Ee, Eemin, Eemax, sigma_Ee_b = 8e-4):
     return _lnL
 
 
-def log_likelihood(theta,Er,Ermin,Ermax, N_p_Si, N_n_Si, m_x,texp_mass,detection=False, background=False, sigma_Ee = 4e-4, sigma_Ee_b = 4e-4, sigma_res_Ee = 4e-4, eff = 1,**kwargs):
+def log_likelihood(theta,Er,Ermin,Ermax, N_p_Si, N_n_Si, m_x,texp_mass,detection=False, background=False, sigma_Ee = 4e-4, sigma_Ee_b = 4e-4, sigma_res_Ee = 4e-4, eff = 1, step=200,**kwargs):
     """ Calculates the log likelihood of the given Events signals Er.
         Er must be in Nuclear recoil units.
         The loglikelihood can be the theoretical (returning in nuclear recoil units)
@@ -61,7 +61,7 @@ def log_likelihood(theta,Er,Ermin,Ermax, N_p_Si, N_n_Si, m_x,texp_mass,detection
     sigma_p = np.power(10, sigma_exp)
     
     ### Fiducial region
-    Enr_space = np.geomspace(Ermin,Ermax,200)
+    Enr_space = np.geomspace(Ermin,Ermax,step)
     
     if detection:
         ### Detected differential rate (Ionization energy) for the given energy values
