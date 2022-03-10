@@ -10,8 +10,8 @@ from lindhard import lindhard_transform
 def sigma_res(E, sigma_0 = 4e-3):
     """ Calculates the ionization energy resolution of the cluster reconstruction.
     """
-    #return np.sqrt(sigma_0**2+3.77e-3*0.133*E)
-    return sigma_0
+    return np.sqrt(sigma_0**2+3.77e-3*0.133*E)
+    #return sigma_0
 
 def resolution(E1, E2, sigma_E):
     """ Gaussian resolution around E2 energy.
