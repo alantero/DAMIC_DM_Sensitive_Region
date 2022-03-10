@@ -4,7 +4,8 @@ import emcee
 import corner
 
 from WIMpy import DMUtils as DMU
-from lindhard import *
+#from lindhard import *
+from lindhard import lindhard_transform
 from differential_rate import *
 
 
@@ -45,6 +46,8 @@ def log_likelihood(theta,Er,Ermin,Ermax, N_p_Si, N_n_Si, m_x,texp_mass,detection
     if type(Er) is list:
         Er = np.array(Er)
 
+    l = lindhard_transform(Ermin, Ermax, step)
+
     ### Fitting parameters
     ## cross section is equal to 10 to sigma_exp
     if len(theta) < 3:
@@ -65,11 +68,11 @@ def log_likelihood(theta,Er,Ermin,Ermax, N_p_Si, N_n_Si, m_x,texp_mass,detection
     
     if detection:
         ### Detected differential rate (Ionization energy) for the given energy values
-        dR = dR_dEe(Er, N_p_Si, N_n_Si, m_x, sigma_p, sigma_res_Ee, sigma_Ee, eff)
+        dR = dR_dEe(Er, N_p_Si, N_n_Si, m_x, sigma_p, sigma_res_Ee, sigma_Ee, eff, Ermin=Ermin, Ermax=Ermax)
         ### Differential rate over the fiducial region
-        dR_space = dR_dEe(Enr_space, N_p_Si, N_n_Si, m_x, sigma_p, sigma_res_Ee, sigma_Ee, eff)
+        dR_space = dR_dEe(Enr_space, N_p_Si, N_n_Si, m_x, sigma_p, sigma_res_Ee, sigma_Ee, eff, Ermin=Ermin, Ermax=Ermax)
         ### Integral of the differential rate over the fidutial region
-        C_sigma0 = simpson(dR_space,lindhard(Enr_space))
+        C_sigma0 = simpson(dR_space,l.lindhard(Enr_space))
     else:
         ### Theoretical differential rate (Nuclear recoils) for the given energy values
         dR = DMU.dRdE_standard(Er, N_p_Si, N_n_Si, m_x, sigma_p)
@@ -82,7 +85,7 @@ def log_likelihood(theta,Er,Ermin,Ermax, N_p_Si, N_n_Si, m_x,texp_mass,detection
         ### Normalized PDF signal and expected signal events
         fs = np.zeros([len(Er)])
         ## Reconstruction efficiency cut
-        fs[Er>lindhard_inv(sigma_Ee)] = dR[Er>lindhard_inv(sigma_Ee)]/C_sigma0
+        fs[Er>l.lindhard_inv(sigma_Ee)] = dR[Er>l.lindhard_inv(sigma_Ee)]/C_sigma0
     else:
         fs = dR/C_sigma0
     ## Expected signal events
@@ -90,14 +93,14 @@ def log_likelihood(theta,Er,Ermin,Ermax, N_p_Si, N_n_Si, m_x,texp_mass,detection
 
     if background:
         ### Adds the background to the likelihood
-        dEee = lindhard(Ermax)-lindhard(Ermin)
+        dEee = l.lindhard(Ermax)-l.lindhard(Ermin)
         ## Calculates the number of events above the efficiency threshold
-        Er_eff = np.array(Er)[np.array(Er)>lindhard_inv(sigma_Ee_b)]
+        Er_eff = np.array(Er)[np.array(Er)>l.lindhard_inv(sigma_Ee_b)]
         fb = np.zeros([len(Er)])
         if detection:
-            fb[Er>lindhard_inv(sigma_Ee_b)] = [1/dEee] * len(Er_eff)
+            fb[Er>l.lindhard_inv(sigma_Ee_b)] = [1/dEee] * len(Er_eff)
         else:
-            fb = lindhard_derivative(Er)/dEee
+            fb = l.lindhard_derivative(Er)/dEee
         ### log likelihood
         #print("fs: ", fs)
         #print("fb: ", fb)

@@ -6,7 +6,8 @@ from scipy.interpolate import UnivariateSpline
 import matplotlib.pyplot as plt
 
 from WIMpy import DMUtils as DMU
-from lindhard import *
+#from lindhard import *
+from lindhard import lindhard_transform
 from differential_rate import *
 
 
@@ -19,56 +20,61 @@ def cdf_signal(Er, N_p_Si, N_n_Si, m_x, sigma_p, C_sigma0, detection=False, sigm
         ### Por la cara a veces con random signal llega un ndarray
         Er = Er[0]
 
+
+    ### FIXME Quick tranform of Ee to Er to calculate lindhard
+    l = lindhard_transform(Eemin*2, Eemax*2, step)
+    l = lindhard_transform(l.lindhard_inv(Eemin), l.lindhard_inv(Eemax), step)
+
     if detection:
-        sigma_Er = lindhard_inv(sigma_Ee)
+        sigma_Er = l.lindhard_inv(sigma_Ee)
         ### cdf below this threshold is 0
         if  Er > sigma_Er:
             ### The E_space must be all the space. NOT ONLY FROM sigma_Er to Er
-            E_space = np.geomspace(lindhard_inv(Eemin),Er,step)
-            fs = dR_dEe(E_space, N_p_Si, N_n_Si, m_x, sigma_p, sigma_res_Ee, sigma_Ee, eff, step)/C_sigma0
-            #E_ = np.geomspace(lindhard_inv(Eemin), lindhard_inv(Eemax), step)
+            E_space = np.geomspace(l.lindhard_inv(Eemin),Er,step)
+            fs = dR_dEe(E_space, N_p_Si, N_n_Si, m_x, sigma_p, sigma_res_Ee, sigma_Ee, eff=eff, step=step, Ermin=l.lindhard_inv(Eemin), Ermax=l.lindhard_inv(Eemax))/C_sigma0
+            #E_ = np.geomspace(l.lindhard_inv(Eemin), l.lindhard_inv(Eemax), step)
             #fs_ = dR_dEe(E_, N_p_Si, N_n_Si, m_x, sigma_p, sigma_res_Ee, sigma_Ee, step)/C_sigma0
-            #print(simpson(fs_,lindhard(E_)))
-            cdf = simpson(fs, lindhard(E_space))
+            #print(simpson(fs_,l.lindhard(E_)))
+            cdf = simpson(fs, l.lindhard(E_space))
             #print(cdf)
         else:
             cdf = 0.0
     else:
-        E_space = np.geomspace(lindhard_inv(Eemin),Er,step)
+        E_space = np.geomspace(l.lindhard_inv(Eemin),Er,step)
         cdf = simpson(DMU.dRdE_standard(E_space, N_p_Si, N_n_Si, m_x, sigma_p)/C_sigma0, E_space)
     #if ndarr:
     #    cdf = np.array([cdf])
     return cdf
 
 
-def random_signal(n_size, N_p_Si, N_n_Si, m_x, sigma_p, C_sigma0, Emin = 4e-4, Emax = 7, detection=False):
-    """ Simulates the energy of the events.
-        Returns the energy in Nuclear recoil units.
-    """
-    u = np.random.rand(n_size)
+#def random_signal(n_size, N_p_Si, N_n_Si, m_x, sigma_p, C_sigma0, Emin = 4e-4, Emax = 7, detection=False):
+#    """ Simulates the energy of the events.
+#        Returns the energy in Nuclear recoil units.
+#    """
+#    u = np.random.rand(n_size)
+#
+#    events = []
+#    if detection:
+#        dom = [Emin,Emax]    
+#    else:
+#        dom = [lindhard_inv(Emin),lindhard_inv(Emax)] 
+#    for x in u:
+#        E_event = float(inversefunc(cdf_signal, y_values = x, args=(N_p_Si, N_n_Si, m_x, sigma_p, C_sigma0, detection), domain=dom,accuracy=4))
 
-    events = []
-    if detection:
-        dom = [Emin,Emax]    
-    else:
-        dom = [lindhard_inv(Emin),lindhard_inv(Emax)] 
-    for x in u:
-        E_event = float(inversefunc(cdf_signal, y_values = x, args=(N_p_Si, N_n_Si, m_x, sigma_p, C_sigma0, detection), domain=dom,accuracy=4))
-
-        if E_event < 0:
-            """ This problem is due to dRdEe is not a continuos function.
-                When it reaches the efficiency threshold it fails to calculate the inverse.
-                We just recalculate the random number until we obtain E_event>0.
-            """
-            negative = True
-            while negative:
-                u_i = np.random.rand(1)
-                E_event = float(inversefunc(cdf_signal, y_values = u_i, args=(N_p_Si, N_n_Si, m_x, sigma_p, C_sigma0, detection)))
-                if E_event>0:
-                    negative = False
-        events.append(E_event)
-
-    return events
+#        if E_event < 0:
+#            """ This problem is due to dRdEe is not a continuos function.
+#                When it reaches the efficiency threshold it fails to calculate the inverse.
+#                We just recalculate the random number until we obtain E_event>0.
+#            """
+#            negative = True
+#            while negative:
+#                u_i = np.random.rand(1)
+#                E_event = float(inversefunc(cdf_signal, y_values = u_i, args=(N_p_Si, N_n_Si, m_x, sigma_p, C_sigma0, detection)))
+#                if E_event>0:
+#                    negative = False
+#        events.append(E_event)
+#
+#    return events
 
 
 #def random_signal_det(n_size, N_p_Si, N_n_Si, m_x, sigma_p, C_sigma0, Eemin = 4e-4, Eemax = 7, sigma_res_Ee = 4e-4, sigma_Ee = 4e-4, step = 100):
@@ -97,6 +103,8 @@ def random_signal_det(n_size, N_p_Si, N_n_Si, m_x, sigma_p, C_sigma0, detection,
     """ Simulates the energy of the detected events.
         Returns the energy in Nuclear recoils units.
     """
+    ### FIXME Quick tranform of Ee to Er to calculate lindhard
+    l = lindhard_transform(Eemin*2, Eemax*2, step)
 
     if detection:
         cdf_thres = cdf_signal(sigma_Ee, N_p_Si, N_n_Si, m_x, sigma_p, C_sigma0, detection, sigma_res_Ee=sigma_res_Ee, sigma_Ee=sigma_Ee, Eemin = Eemin, Eemax = Eemax, eff = eff, step=step)
@@ -104,7 +112,7 @@ def random_signal_det(n_size, N_p_Si, N_n_Si, m_x, sigma_p, C_sigma0, detection,
         cdf_thres = 0
     u = np.random.uniform(cdf_thres, 1, n_size)
     #E_range = np.geomspace(lindhard_inv(Eemin), lindhard_inv(Eemax), step)
-    E_range = np.geomspace(lindhard_inv(sigma_Ee), lindhard_inv(Eemax), step)
+    E_range = np.geomspace(l.lindhard_inv(sigma_Ee), l.lindhard_inv(Eemax), step)
     #print(C_sigma0)
     #print(simpson(dR_dEe(E_range, N_p_Si, N_n_Si, m_x, sigma_p, sigma_res_Ee, sigma_Ee, step), lindhard(E_range)))
     cdf_range = np.array([cdf_signal(E, N_p_Si, N_n_Si, m_x, sigma_p, C_sigma0, detection, sigma_res_Ee=sigma_res_Ee, sigma_Ee=sigma_Ee, Eemin=Eemin, Eemax=Eemax, eff=eff, step=step) for E in E_range])
@@ -131,9 +139,9 @@ def random_signal_det(n_size, N_p_Si, N_n_Si, m_x, sigma_p, C_sigma0, detection,
     events = cdf_inv(u)    #events.append(cdf_inv(x))
     if detection:
         ### Prevent for numerical limitations to have events below sigma_Ee
-        while len(events[lindhard(events)<=sigma_Ee]) != 0:
-            events[lindhard(events)<=sigma_Ee] = cdf_inv( np.random.uniform(cdf_thres, 1, len(events[lindhard(events)<=sigma_Ee])) )
-        return lindhard(events).tolist()
+        while len(events[l.lindhard(events)<=sigma_Ee]) != 0:
+            events[l.lindhard(events)<=sigma_Ee] = cdf_inv( np.random.uniform(cdf_thres, 1, len(events[l.lindhard(events)<=sigma_Ee])) )
+        return l.lindhard(events).tolist()
     else:
         return events.tolist()
 
