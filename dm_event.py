@@ -39,7 +39,7 @@ class dm_event(object):
     def efficiency(self, eff_file, plot=False):
         """ Interpolates the efficiency of the given file.
         """
-        df = pd.read_csv(eff_file)
+        df = pd.read_csv(eff_file, comment="#")
         Ee_data, eff_data = df["Ee"].to_numpy(), df["eff"].to_numpy()
         eff_interp = UnivariateSpline(Ee_data, eff_data, k = 2, s = 0)
         def eff_func(Ee):
@@ -54,7 +54,7 @@ class dm_event(object):
         print(self.sigma_Ee, self.sigma_Ee_b)
 
         if plot:
-            Ee = np.linspace(self.Eemin,0.7,400)
+            Ee = np.linspace(self.Eemin,0.4,400)
             plt.plot(Ee, self.eff(Ee))
             plt.xlabel(r"$E$ [keV$_{ee}$]")
             plt.ylabel(r"$\varepsilon(E_{ee})$")
@@ -140,15 +140,14 @@ class dm_event(object):
             ### Theta = [cross_sec_exponent, n_b]
             bnds = kwargs["bounds"]  if "bounds" in kwargs else  [(-44,-38), (0,1e6)]
             x0 = kwargs["x0"] if "x0" in kwargs else [-40,100]
-
         else:
             ### Theta = [cross_sec_exponent]
             bnds = kwargs["bounds"]  if "bounds" in kwargs else [(-50,-30)]
             x0 = kwargs["x0"] if "x0" in kwargs else [-40]
 
-
         if self.detection:
             theta = minimize(log_likelihood, x0, bounds=bnds,method='L-BFGS-B', args = (self.l.lindhard_inv(self.events), self.Ermin, self.Ermax, self.N_p_Si, self.N_n_Si, self.mass_dm, self.mass_det*self.t_exp, self.detection, bkg, sigma_Ee, sigma_Ee_b, sigma_res_Ee, self.eff)).x
+            print(theta)
         else:
             theta = minimize(log_likelihood, x0, bounds=bnds,method='L-BFGS-B', args = (self.events, self.Ermin, self.Ermax, self.N_p_Si, self.N_n_Si, self.mass_dm, self.mass_det*self.t_exp, self.detection, bkg, sigma_Ee, sigma_Ee_b, self.eff)).x
         self.theta = theta
@@ -184,6 +183,7 @@ class dm_event(object):
             ### If the background is not yet simulated its calculated.
             self.simul_bkg(dru, E_bkg_cut)
             self.events = self.bkg_ev# if self.detection else self.bkg_ev
+            print(len(self.events))
             self.sigma_Ee_b = E_bkg_cut
             Er = self.l.lindhard_inv(self.bkg_ev) if self.detection else self.bkg_ev
         
@@ -203,6 +203,8 @@ class dm_event(object):
             self.simul_ev(*bkg_pars, sigma_Ee=self.sigma_Ee, sigma_res_Ee=self.sigma_res_Ee)
             Er = self.l.lindhard_inv(self.events)# if self.detection else self.events
 
+        elif not signal and not "bkg_pars" in kwargs:
+            Er = self.l.lindhard_inv(self.bkg_ev)
 
         if "sigma_Ee_b" in kwargs: self.sigma_Ee_b = kwargs["sigma_Ee_b"]
         ### Finds the cross section for background only data
@@ -210,12 +212,13 @@ class dm_event(object):
         theta_max = minimize(log_likelihood, x0, bounds=bnds,method='L-BFGS-B', args = (Er, self.Ermin, self.Ermax, self.N_p_Si, self.N_n_Si, self.mass_dm, self.mass_det*self.t_exp, self.detection, True, self.sigma_Ee, self.sigma_Ee_b, self.sigma_res_Ee, self.eff, step)).x
         #print("MINIM: ", theta_max)
         self.theta_bkg_only = theta_max
-
+        print(theta_max)
         ### Maximum likelihood value for background only 
         lnL_bkg_only = -log_likelihood(theta_max, Er, self.Ermin, self.Ermax, self.N_p_Si, self.N_n_Si, self.mass_dm, self.mass_det*self.t_exp, self.detection, True, self.sigma_Ee, self.sigma_Ee_b, self.sigma_res_Ee, self.eff, step)
 
         ### Function to shorten the call of log_likelihood
         lnL_lambda = lambda xs:  -log_likelihood([xs, theta_max[1]], Er, self.Ermin, self.Ermax, self.N_p_Si, self.N_n_Si, self.mass_dm, self.mass_det*self.t_exp, self.detection, True, self.sigma_Ee, self.sigma_Ee_b, self.sigma_res_Ee, self.eff, step)
+        #lnL_lambda = lambda theta:  -log_likelihood(theta, Er, self.Ermin, self.Ermax, self.N_p_Si, self.N_n_Si, self.mass_dm, self.mass_det*self.t_exp, self.detection, True, self.sigma_Ee, self.sigma_Ee_b, self.sigma_res_Ee, self.eff, step)
 
         def prior(xs):
             """ Use a flat prior or a flat prior in log scale
@@ -231,10 +234,19 @@ class dm_event(object):
 
         ### Calculates the integral of the log-likelihood over the full cross section range
         ### https://stats.stackexchange.com/questions/434145/how-to-integrate-the-marginal-likelihood-numerically
-        xs_range_full = np.geomspace(bnds[0][0], bnds[0][1], 100)
+        xs_range_full = np.geomspace(bnds[0][0], bnds[0][1], step)
         ## The maximum of the prior is at the begining of the interval
         lnprior_max = prior(bnds[0][0])
-        lnL_full =  np.log(simpson([np.exp(lnL_lambda(xs) + prior(xs) -lnL_bkg_only -lnprior_max) for xs in xs_range_full], xs_range_full ))
+        lnL_full = []
+        
+        """
+        for xs in xs_range_full:
+            lnL_i = lambda b:  log_likelihood([xs, b], Er, self.Ermin, self.Ermax, self.N_p_Si, self.N_n_Si, self.mass_dm, self.mass_det*self.t_exp, self.detection, True, self.sigma_Ee, self.sigma_Ee_b, self.sigma_res_Ee, self.eff, step)
+            b_i = minimize(lnL_i, [theta_max[1]], bounds=[bnds[1]],method='L-BFGS-B').x[0]
+            lnL_full.append( np.exp(lnL_i(b_i) + prior(xs) -lnL_bkg_only -lnprior_max)  ) 
+        """
+
+        lnL_full =  np.log(simpson([np.exp(lnL_lambda(xs) + prior(xs) -lnL_bkg_only -lnprior_max) for xs in xs_range_full], 10**xs_range_full ))
         #lnL_full =  np.log(simpson([np.exp(lnL_lambda(xs)-lnL_bkg_only) for xs in xs_range_full], xs_range_full ))
 
         def lnL_prob(xs_upper):
@@ -247,19 +259,34 @@ class dm_event(object):
                 return cf - 1  
             xs_range = np.geomspace(bnds[0][0], xs_upper, step)
             lnL_num = [np.exp(lnL_lambda(xs) + prior(xs)  -lnL_bkg_only -lnprior_max) for xs in xs_range]
-            #lnL_num = [np.exp(lnL_lambda(xs) - lnL_bkg_only) for xs in xs_range]
-            numerator = np.log(simpson(lnL_num, xs_range))
+
+            """
+            lnL_num = []
+            for xs in xs_range:
+                lnL_i = lambda b:  log_likelihood([xs, b], Er, self.Ermin, self.Ermax, self.N_p_Si, self.N_n_Si, self.mass_dm, self.mass_det*self.t_exp, self.detection, True, self.sigma_Ee, self.sigma_Ee_b, self.sigma_res_Ee, self.eff, step)
+                b_i = minimize(lnL_i, [theta_max[1]], bounds=[bnds[1]],method='L-BFGS-B').x[0]
+                print(lnL_bkg_only)
+                print(-lnL_i(b_i))
+                lnL_num.append( np.exp(-lnL_i(b_i) + prior(xs) - lnL_bkg_only -lnprior_max) ) 
+            """
+
+            #lnL_num = [np.exp(lnL_lambda(xs) - lnL_bkg_only ) for xs in xs_range]
+            numerator = np.log(simpson(lnL_num, 10**xs_range))
             print("Upper xs: ", xs_upper)
             print("Prob: ", np.exp(numerator - lnL_full))
             return cf - np.exp(numerator - lnL_full)
         self.cross_section_95 = 10**bisect(lnL_prob, bnds[0][0], bnds[0][1], rtol=1/step)
         print(self.cross_section_95)
+
+
+        dLL = lnL_bkg_only + log_likelihood([np.log10(self.cross_section_95), theta_max[1]], Er, self.Ermin, self.Ermax, self.N_p_Si, self.N_n_Si, self.mass_dm, self.mass_det*self.t_exp, self.detection, True, self.sigma_Ee, self.sigma_Ee_b, self.sigma_res_Ee, self.eff, step)
+        print("dLL = {}".format(dLL))
          
         xs_range_full = np.geomspace(bnds[0][0], bnds[0][1], 30)
         if plot:
             plt.plot(xs_range_full, [cf-lnL_prob(xs) for xs in xs_range_full])
             plt.hlines(cf, xs_range_full[0], xs_range_full[-1], color="r")
-            plt.axvline(self.cross_section_95, color="r")
+            plt.axvline(np.log10(self.cross_section_95), color="r")
             plt.xlabel(r"$\sigma$ [cm$^2$]")
             plt.ylabel(r"P($\sigma\leq \sigma_{cf})$")
             #plt.xscale("log")
@@ -267,15 +294,17 @@ class dm_event(object):
 
         ###Plots the likelihood
         if plot:
-            xs_vec = np.linspace(bnds[0][0], bnds[0][1], 100)
+            xs_vec = np.linspace(bnds[0][0], bnds[0][1], 30)
             L = []
             for xs in xs_vec:
                 theta = [xs, theta_max[1]]
-                L.append(-log_likelihood(theta, Er, self.Ermin, self.Ermax, self.N_p_Si, self.N_n_Si, self.mass_dm, self.mass_det*self.t_exp, self.detection, True, self.sigma_Ee, self.sigma_Ee_b, self.sigma_res_Ee, self.eff))
-            plt.plot(10**xs_vec,L)
-            plt.xscale("log")
+                L.append(log_likelihood(theta, Er, self.Ermin, self.Ermax, self.N_p_Si, self.N_n_Si, self.mass_dm, self.mass_det*self.t_exp, self.detection, True, self.sigma_Ee, self.sigma_Ee_b, self.sigma_res_Ee, self.eff)+lnL_bkg_only)
+            plt.axvline(np.log10(self.cross_section_95), color="r")
+            plt.plot(xs_vec,L)
+            #plt.xscale("log")
             plt.ylabel(r"$ln\mathcal{L}$")
             plt.xlabel(r"$\sigma$ [cm$^{-2}$]")
+            plt.ylim(-0.5,4)
             plt.show()
 
     def upper_limit_dLL(self, deltaLL = 4.5, plot = False, **kwargs):
@@ -287,6 +316,7 @@ class dm_event(object):
         bnds = kwargs["bounds"]  if "bounds" in kwargs else  [[-44,-38], [0,1e6]]
         x0 = kwargs["x0"] if "x0" in kwargs else [-40,100]
         bkg_pars = kwargs["bkg_pars"] if "bkg_pars" in kwargs else [0.1,4e-4]
+        step = kwargs["step"] if "step" in kwargs else 100
         if "sigma_Ee" in kwargs: self.sigma_Ee = kwargs["sigma_Ee"]
         if "sigma_res_Ee" in kwargs: self.sigma_res_Ee = kwargs["sigma_res_Ee"]
         #sigma_Ee = kwargs["sigma_Ee"] if "sigma_Ee" in kwargs else self.sigma_Ee
@@ -305,26 +335,32 @@ class dm_event(object):
         if "sigma_Ee_b" in kwargs: self.sigma_Ee_b = kwargs["sigma_Ee_b"]
         ### Finds the cross section for background only data
         ### This will find the minimum value of lnL (in theory it is the maximum because is -lnL)
-        theta_max = minimize(log_likelihood, x0, bounds=bnds,method='L-BFGS-B', args = (Er, self.Ermin, self.Ermax, self.N_p_Si, self.N_n_Si, self.mass_dm, self.mass_det*self.t_exp, self.detection, True, self.sigma_Ee, self.sigma_Ee_b, self.sigma_res_Ee, self.eff)).x
+        theta_max = minimize(log_likelihood, x0, bounds=bnds,method='L-BFGS-B', args = (Er, self.Ermin, self.Ermax, self.N_p_Si, self.N_n_Si, self.mass_dm, self.mass_det*self.t_exp, self.detection, True, self.sigma_Ee, self.sigma_Ee_b, self.sigma_res_Ee, self.eff, step)).x
         #print("MINIM: ", theta_max)
         self.theta_bkg_only = theta_max
 
         ### Maximum likelihood value for background only 
-        lnL_bkg_only = -log_likelihood(theta_max, Er, self.Ermin, self.Ermax, self.N_p_Si, self.N_n_Si, self.mass_dm, self.mass_det*self.t_exp, self.detection, True, self.sigma_Ee, self.sigma_Ee_b, self.sigma_res_Ee, self.eff)
+        lnL_bkg_only = -log_likelihood(theta_max, Er, self.Ermin, self.Ermax, self.N_p_Si, self.N_n_Si, self.mass_dm, self.mass_det*self.t_exp, self.detection, True, self.sigma_Ee, self.sigma_Ee_b, self.sigma_res_Ee, self.eff, step)
 
         ### Function to find the roots of lnL-lnL_max+4.5. 
         ### To be able to find the xs that is deltaLL = 4.5 away from the maximum
         #lnL_func = lambda xs_range: -log_likelihood([xs_range, theta_max[1]], Er, self.Ermin, self.Ermax, self.N_p_Si, self.N_n_Si, self.mass_dm, self.mass_det*self.t_exp, self.detection, True, self.sigma_Ee, self.sigma_Ee_b, self.sigma_res_Ee, self.eff) #+lnL_bkg_only+deltaLL
-
+        """
         def lnL_dLL(xs_range):
-            """ Function to find the value where ln_max- ln_confidence = deltaLL
-            """
+            #Function to find the value where ln_max- ln_confidence = deltaLL
+            
             lnL_func = lambda b: log_likelihood([xs_range, b], Er, self.Ermin, self.Ermax, self.N_p_Si, self.N_n_Si, self.mass_dm, self.mass_det*self.t_exp, self.detection, True, self.sigma_Ee, self.sigma_Ee_b, self.sigma_res_Ee, self.eff) 
             b_min = minimize(lnL_func, x0[1], bounds=[bnds[1]], method='L-BFGS-B').x
             #print(xs_range, b_min)
             return -log_likelihood([xs_range, b_min], Er, self.Ermin, self.Ermax, self.N_p_Si, self.N_n_Si, self.mass_dm, self.mass_det*self.t_exp, self.detection, True, self.sigma_Ee, self.sigma_Ee_b, self.sigma_res_Ee, self.eff)-lnL_bkg_only+deltaLL
+        """
 
-        self.cross_section_95 = bisect(lnL_dLL, bnds[0][0], bnds[0][1], rtol=1e-1)
+        def lnL_dLL(xs_range):
+            """ Function to find the value where ln_max- ln_confidence = deltaLL
+            """
+            return -log_likelihood([xs_range, theta_max[1]], Er, self.Ermin, self.Ermax, self.N_p_Si, self.N_n_Si, self.mass_dm, self.mass_det*self.t_exp, self.detection, True, self.sigma_Ee, self.sigma_Ee_b, self.sigma_res_Ee, self.eff, step)-lnL_bkg_only+deltaLL
+
+        self.cross_section_95 = 10**bisect(lnL_dLL, bnds[0][0], bnds[0][1], rtol=1/step)
         print(self.cross_section_95)
 
         ##Plots the likelihood
