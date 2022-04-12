@@ -38,8 +38,8 @@ def dR_dEe(Er, N_p_Si, N_n_Si, m_x, sigma_p, sigma_res_Ee = 4e-4, sigma_Ee = 4e-
     ### Transform to ionization energy
     Ee = l.lindhard(Er)
     ### Calculate the resolution in both energy units
-    sigma_res_Ee_full = sigma_res(Ee, sigma_res_Ee) 
-    sigma_res_Er_full = l.lindhard_inv(sigma_res_Ee_full)#/l.lindhard_derivative(Er)
+    #sigma_res_Ee_full = sigma_res(Ee, sigma_res_Ee) 
+    #sigma_res_Er_full = l.lindhard_inv(sigma_res_Ee_full)#/l.lindhard_derivative(Er)
     ## Needs to be multiplied by dEnr/dEee
     #sigma_res_Er_full = sigma_res_Ee_full/l.lindhard_derivative(Er)
     ##
@@ -47,22 +47,27 @@ def dR_dEe(Er, N_p_Si, N_n_Si, m_x, sigma_p, sigma_res_Ee = 4e-4, sigma_Ee = 4e-
     #plt.plot(Er, l.lindhard_inv(sigma_res_Ee_full), label="Direct")
     #plt.legend(loc="best")
     #plt.show()
-    ## Integral limits in energy recoil units
-    #n_std, step = 5, 100
-    #Emin, Emax = np.clip(Er-n_std*sigma_res_Er_full,1e-6,step), np.clip(Er+n_std*sigma_res_Er_full,1e-6,step)
 
-    Emin, Emax = np.clip(Er-l.lindhard_inv(n_std*sigma_res_Ee_full),0.04,1000), np.clip(Er+l.lindhard_inv(n_std*sigma_res_Ee_full),0.04,1000)
+    ## Integral limits in energy recoil units
+    #Emin, Emax = np.clip(Er-l.lindhard_inv(n_std*sigma_res_Ee_full),0.04,1000), np.clip(Er+l.lindhard_inv(n_std*sigma_res_Ee_full),0.04,1000)
     ### Sigma region of energies for each point in Er
-    E_space = np.geomspace(Emin, Emax, step).T
+    #E_space = np.geomspace(Emin, Emax, step).T
     ### Calculates the integrand for each point
     ### No res
-    if sigma_Ee is None:
-        integrand = DMU.dRdE_standard(E_space, N_p_Si, N_n_Si, m_x, sigma_p)/l.lindhard_derivative(E_space)
-    else:
+    if sigma_res_Ee is not None:
+        ### Calculate the resolution in both energy units
+        sigma_res_Ee_full = sigma_res(Ee, sigma_res_Ee) 
+        sigma_res_Er_full = l.lindhard_inv(sigma_res_Ee_full)#/l.lindhard_derivative(Er)
+        ## Needs to be multiplied by dEnr/dEee
+        #sigma_res_Er_full = sigma_res_Ee_full/l.lindhard_derivative(Er)
+        ## Integral limits in energy recoil units
+        Emin, Emax = np.clip(Er-l.lindhard_inv(n_std*sigma_res_Ee_full),0.04,1000), np.clip(Er+l.lindhard_inv(n_std*sigma_res_Ee_full),0.04,1000)
+        ### Sigma region of energies for each point in Er
+        E_space = np.geomspace(Emin, Emax, step).T
         integrand = DMU.dRdE_standard(E_space, N_p_Si, N_n_Si, m_x, sigma_p)/l.lindhard_derivative(E_space)*resolution(l.lindhard(E_space),Ee,sigma_res_Ee_full)
-    #plt.plot(l.lindhard(E_space), integrand)
-    #plt.loglog()
-    #plt.show()
+        #plt.plot(l.lindhard(E_space), integrand)
+        #plt.loglog()
+        #plt.show()
 
     ### Integrates each point over its sigma interval
     if type(eff) is not float and type(eff) is not int and type(eff) is not float:

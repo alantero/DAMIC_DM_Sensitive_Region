@@ -88,6 +88,8 @@ class dm_event(object):
         Enr_space = np.geomspace(self.Ermin, self.Ermax, step)
         if self.detection:
             dRdE = dR_dEe(Enr_space, self.N_p_Si, self.N_n_Si, self.mass_dm, self.cross_section, self.sigma_res_Ee, self.sigma_Ee, self.eff, step, n_std, self.Ermin, self.Ermax)
+            self.dRdE_lamb = lambda E: dR_dEe(E, self.N_p_Si, self.N_n_Si, self.mass_dm, self.cross_section, self.sigma_res_Ee, self.sigma_Ee, self.eff, step, n_std, self.Ermin, self.Ermax)
+
             self.C_sig = simpson(dRdE, self.l.lindhard(Enr_space))
             self.E_space_dist, self.dRdE_dist = self.l.lindhard(Enr_space), dRdE
         else:
@@ -171,7 +173,7 @@ class dm_event(object):
 
         if self.detection:
             theta = minimize(log_likelihood, x0, bounds=bnds,method='L-BFGS-B', args = (self.l.lindhard_inv(self.events), self.Ermin, self.Ermax, self.N_p_Si, self.N_n_Si, self.mass_dm, self.mass_det*self.t_exp, self.detection, bkg, sigma_Ee, sigma_Ee_b, sigma_res_Ee, self.eff)).x
-            print(theta)
+            print(10**theta)
         else:
             theta = minimize(log_likelihood, x0, bounds=bnds,method='L-BFGS-B', args = (self.events, self.Ermin, self.Ermax, self.N_p_Si, self.N_n_Si, self.mass_dm, self.mass_det*self.t_exp, self.detection, bkg, sigma_Ee, sigma_Ee_b, self.eff)).x
         self.theta = theta
