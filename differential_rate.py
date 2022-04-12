@@ -51,21 +51,34 @@ def dR_dEe(Er, N_p_Si, N_n_Si, m_x, sigma_p, sigma_res_Ee = 4e-4, sigma_Ee = 4e-
     #n_std, step = 5, 100
     #Emin, Emax = np.clip(Er-n_std*sigma_res_Er_full,1e-6,step), np.clip(Er+n_std*sigma_res_Er_full,1e-6,step)
 
-    Emin, Emax = np.clip(Er-l.lindhard_inv(n_std*sigma_res_Ee_full),1e-6,1000), np.clip(Er+l.lindhard_inv(n_std*sigma_res_Ee_full),1e-6,1000)
+    Emin, Emax = np.clip(Er-l.lindhard_inv(n_std*sigma_res_Ee_full),0.04,1000), np.clip(Er+l.lindhard_inv(n_std*sigma_res_Ee_full),0.04,1000)
     ### Sigma region of energies for each point in Er
     E_space = np.geomspace(Emin, Emax, step).T
     ### Calculates the integrand for each point
-    integrand = DMU.dRdE_standard(E_space, N_p_Si, N_n_Si, m_x, sigma_p)/l.lindhard_derivative(E_space)*resolution(l.lindhard(E_space),Ee,sigma_res_Ee_full)
-   
+    ### No res
+    if sigma_Ee is None:
+        integrand = DMU.dRdE_standard(E_space, N_p_Si, N_n_Si, m_x, sigma_p)/l.lindhard_derivative(E_space)
+    else:
+        integrand = DMU.dRdE_standard(E_space, N_p_Si, N_n_Si, m_x, sigma_p)/l.lindhard_derivative(E_space)*resolution(l.lindhard(E_space),Ee,sigma_res_Ee_full)
+    #plt.plot(l.lindhard(E_space), integrand)
+    #plt.loglog()
+    #plt.show()
+
     ### Integrates each point over its sigma interval
     if type(eff) is not float and type(eff) is not int and type(eff) is not float:
         ### If eff is the file name, interpolates the values of the file.
         eff = eff(Ee)
-        dR = eff*simpson(integrand,l.lindhard(E_space))
+        ## No res
+        if sigma_res_Ee is None:
+            dR = eff*DMU.dRdE_standard(Er, N_p_Si, N_n_Si, m_x, sigma_p)/l.lindhard_derivative(Er)
+        else:
+            dR = eff*simpson(integrand,l.lindhard(E_space))
     else:
         ### Efficiency cut
         sigma_Er = l.lindhard_inv(sigma_Ee)
-        dR = eff*simpson(integrand,l.lindhard(E_space))
+        #dR = eff*simpson(integrand,l.lindhard(E_space))
+        ## No res
+        dR = eff*DMU.dRdE_standard(Er, N_p_Si, N_n_Si, m_x, sigma_p)/l.lindhard_derivative(Er)
         dR[Er<=sigma_Er] = np.zeros([len(Er[Er<=sigma_Er])])
 
     #plt.plot(Ee, dR)

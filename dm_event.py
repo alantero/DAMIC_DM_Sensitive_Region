@@ -28,13 +28,35 @@ class dm_event(object):
         ### Signal Efficiency threshold
         self.sigma_Ee = sigma_Ee
         ### Efficiency
-        if type(eff) is str:
+        if type(eff) is str and eff != "efficiency_2020":
             ### If a file name is given interpolates the values
             self.efficiency(eff)
+        elif eff == "efficiency_2020":
+            self.eff = self.efficiency_2020
         else:
             ### If it is a value uses it as an step function
             self.eff = eff
         self.normalization_signal(step = step)
+
+
+    def efficiency_2020(self, Ee, plot=False):
+        a = 7.5e-2
+        b = 75.2
+        c = 4.6e-2
+        d = -5.62e-3
+        e = 9.6e-1
+        f = 2.1e-1
+        g = 15
+        #a,b,c,d,e,f,g = [ 7.54818601e-02,6.60650401e+01,7.19271176e-02,-5.52791252e-03,9.89890621e-01,6.89655309e-01,2.00991160e+01]
+        eff = ( 1/( 1+np.exp(-(Ee-a)*b) ) -c )*( (d*Ee+e) + f*np.exp(-g*Ee) ) 
+        if plot:
+            plt.plot(Ee, eff)
+            plt.xlabel(r"$E$ [keV$_{ee}$]")
+            plt.ylabel(r"$\varepsilon(E_{ee})$")
+        #self.sigma_Ee = 40e-3
+        eff[Ee<= self.sigma_Ee] = [0] * len([Ee<=self.sigma_Ee])
+        return eff
+
 
     def efficiency(self, eff_file, plot=False):
         """ Interpolates the efficiency of the given file.
@@ -66,14 +88,16 @@ class dm_event(object):
         Enr_space = np.geomspace(self.Ermin, self.Ermax, step)
         if self.detection:
             dRdE = dR_dEe(Enr_space, self.N_p_Si, self.N_n_Si, self.mass_dm, self.cross_section, self.sigma_res_Ee, self.sigma_Ee, self.eff, step, n_std, self.Ermin, self.Ermax)
-            C_sig = simpson(dRdE, self.l.lindhard(Enr_space))
+            self.C_sig = simpson(dRdE, self.l.lindhard(Enr_space))
             self.E_space_dist, self.dRdE_dist = self.l.lindhard(Enr_space), dRdE
         else:
             dRdE = DMU.dRdE_standard(Enr_space, self.N_p_Si, self.N_n_Si, self.mass_dm, self.cross_section)
-            C_sig = simpson(dRdE, Enr_space)
+            self.C_sig = simpson(dRdE, Enr_space)
             self.E_space_dist, self.dRdE_dist = Enr_space, dRdE
-        self.C_sig = C_sig
+        #print("Info Events")
+        #print(self.C_sig)
         self.s = self.C_sig*self.t_exp*self.mass_det
+        #print(self.s)
         self.n_s_det = np.random.poisson(self.s)
         #print(self.n_s_det)
 
