@@ -13,6 +13,7 @@ from differential_rate import *
 from simulate_events import *
 from likelihood import *
 
+
 class dm_event(object):
     def __init__(self, N_p_Si, N_n_Si, mass_dm, cross_section, mass_det, t_exp, detection, Eemin=4e-4,Eemax=7, sigma_res_Ee = 4e-4, sigma_Ee = 4e-4, eff = 1, step = 400):
         self.N_p_Si, self.N_n_Si, self.mass_dm, self.cross_section = N_p_Si, N_n_Si, mass_dm, cross_section
@@ -155,7 +156,7 @@ class dm_event(object):
         if not self.detection: self.bkg_ev = self.l.lindhard_inv(self.bkg_ev).tolist()
  
 
-    def likelihood(self, deltaLL = False, errors = False, **kwargs):
+    def likelihood(self, **kwargs):
         bkg = hasattr(self, "bkg_ev")
         ### Cut in signal efficiency
         sigma_Ee = kwargs["sigma_Ee"] if "sigma_Ee" in kwargs else self.sigma_Ee
@@ -177,9 +178,6 @@ class dm_event(object):
         else:
             theta = minimize(log_likelihood, x0, bounds=bnds,method='L-BFGS-B', args = (self.events, self.Ermin, self.Ermax, self.N_p_Si, self.N_n_Si, self.mass_dm, self.mass_det*self.t_exp, self.detection, bkg, sigma_Ee, sigma_Ee_b, self.eff)).x
         self.theta = theta
-
-        if errors and self.detection:
-            theta_errors = theta_confidence(theta, self.l.lindhard_inv(self.events), self.Ermin, self.Ermax, self.N_p_Si, self.N_n_Si, self.mass_dm, self.mass_det*self.t_exp, self.detection, bkg)
 
         return theta
 
@@ -439,7 +437,6 @@ class dm_event(object):
         bnds = kwargs["bounds"]  if "bounds" in kwargs else  [[-44,-38],[0,30],[0,1e6]]
         x0 = kwargs["x0"] if "x0" in kwargs else [-40,5,100]
 
-
         ###Plots the likelihood agains the DM mass
         if plot:
             lnL_func = lambda mx_range: -log_likelihood([np.log10(self.cross_section), mx_range, self.n_b_det], self.l.lindhard_inv(self.events), self.Ermin, self.Ermax, self.N_p_Si, self.N_n_Si, self.mass_dm, self.mass_det*self.t_exp, self.detection, True, self.sigma_Ee, self.sigma_Ee_b, self.sigma_res_Ee, self.eff) +lnL_bkg_only+deltaLL
@@ -465,21 +462,6 @@ class dm_event(object):
         self.theta = theta_max
         self.theta_confidence = theta_errors
 
-
-    def likelihood_sigma_i(self, sigma_0, *bkg_pars):
-        self.cross_section = 10**sigma_0
-        self.simul_ev(*bkg_pars)
-        dLL = self.likelihood(deltaLL = True)
-        return dLL
-
-
-    def minimize_sensitivity(self, sigma_0 = -42, dLL_thres = 4.5, bnds = [[-43,-41]], *bkg_pars):
-        """ For the given DM mass calculates what is the minimum cross section
-            that gives dLL = 4.5. Meaning that is discoverable.
-        """
-        self.original_cross_section = self.cross_section
-        minimum_cross_section = minimize(self.likelihood_sigma_i, sigma_0 ,bounds=bnds, args = (bkg_pars) ).x
-        self.cross_section = self.original_cross_section
 
 
     def verbose(self):
@@ -560,47 +542,13 @@ class dm_event(object):
         elif var_name == "fsb":
             E_space, dRdE_space = self.dRdE(step, Eemin=Eemin, Eemax=Eemax, n_std=n_std)
             if self.detection:
-                #fb = np.array([1/(self.Eemax-self.Eemin)] * step)
                 fb = np.array([self.dru_bkg] * step)
                 fb[E_space<self.sigma_Ee_b]  = [0] * len(fb[E_space<self.sigma_Ee_b])
                 plt.xlabel(r"$E_{ee}$ [keV$_{ee}$]")
             else:
-                #E_space = np.geomspace(self.Ermin, self.Ermax, step)
-                #fb = 1/(self.Eemax-self.Eemin)*lindhard_derivative(E_space)
                 fb = self.dru_bkg*self.l.lindhard_derivative(E_space)
                 plt.xlabel(r"$E_{NR}$ [keV]")
-            #fsb = (dRdE_space*self.n_s_det/self.C_sig+fb*self.n_b_det)/(self.n_s_det+self.n_b_det)
-            #fsb = (dRdE_space + np.array([self.dru_bkg] * step))/(len(self.events))
-            #fsb = (dRdE_space/self.C_sig+fb)
-            #fsb = (dRdE_space/self.C_sig*fb)
             fsb = (dRdE_space+fb)*self.t_exp*self.mass_det/len(self.events)#(self.n_s_det+self.n_b_det)
             plt.plot(E_space, fsb, label=label)
             plt.ylabel(r"$f_{s+b}(E|M)$")
 
-        elif var_name == "cdf":
-            E_space = np.geomspace(self.Ermin, self.Ermax, step)
-            cdf = [cdf_signal(E, self.N_p_Si, self.N_n_Si, self.mass_dm, self.cross_section, self.C_sig, self.detection, self.sigma_res_Ee, self.sigma_Ee, self.Eemin, self.Eemax, self.eff,step) for E in E_space]
-            if self.detection:
-                plt.plot(self.l.lindhard(E_space), cdf)
-                plt.xlabel(r"$E_{ee}$ [keV$_{ee}$]")
-            else:
-                plt.plot(E_space, cdf)
-                plt.xlabel(r"$E_{NR}$ [keV]")
-            plt.ylabel(r"$F_s(E|M)$")
-            plt.xscale("log")
-
-        elif var_name == "inv_cdf":
-            u = np.linspace(1e-1,1,step)
-            inv_l = []
-            bnds = [ [self.l.lindhard_inv(self.Eemin),self.l.lindhard_inv(self.Eemax)] ]
-            def inv(x,y0):
-                return (cdf_signal(x,self.N_p_Si, self.N_n_Si, self.mass_dm, self.cross_section, self.C_sig, self.detection)-y0)**2
-            for x in u:
-                inv_l.append(minimize(inv, 0.1, args = (x), method="L-BFGS-B", tol=1e-30).x[0])
-            if self.detection:
-                plt.plot(u,self.l.lindhard(inv_l))
-                plt.ylabel(r"$F_s^{-1}(E|M)$ [keV$_ee$}]")
-            else:
-                plt.plot(u,inv_l)
-                plt.ylabel(r"$F_s^{-1}(E|M)$ [keV]")
-            plt.xlabel(r"$F_s(E|M)$")

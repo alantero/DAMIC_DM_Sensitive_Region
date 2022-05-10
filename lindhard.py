@@ -22,6 +22,8 @@ class lindhard_transform(object):
         self.lindhard_real_inv = CubicSpline(self.Ee, self.Er)
         self.lindhard_real_der = UnivariateSpline(self.Er, self.Ee, k=3, s=2).derivative()
 
+
+
     """
     #def lindhard(self, E):
     def lindhard_DAMIC(self, E):
